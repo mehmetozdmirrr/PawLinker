@@ -1,18 +1,32 @@
+# 🐾 PawLinker
 
-# pawlinker
+PawLinker, Flutter ile geliştirilen, kişi ve konum bazlı çalışan bir **hayvan sahiplendirme ve sosyal etkileşim uygulamasıdır**. Kullanıcılar konumlarına yakın sahiplendirme ilanlarını görebilir, başvuru yapabilir, favori ilanlarını kaydedebilir ve forum modülü sayesinde toplulukla iletişim kurabilir.
 
-A new Flutter project.
+---
 
-## Getting Started
+## 🚀 Özellikler
+- 📍 Konum bazlı sahiplendirme ilanları
+- 🐾 Tinder tarzı sağa/sola kaydırarak eşleşme
+- ❤️ Favorilere ekleme
+- 🗨️ Forum modülü
+- 🔔 Anlık bildirimler
+- 👤 Kullanıcı ve evcil hayvan profilleri
+- 📍 Google Maps entegrasyonu
 
-This project is a starting point for a Flutter application.
+---
 
-A few resources to get you started if this is your first Flutter project:
+## 🛠️ Kullanılan Teknolojiler
+- Flutter & Dart
+- Firebase Authentication
+- Firestore Database
+- Firebase Cloud Messaging
+- Google Maps API
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
-
+## 📲 Kurulum ve Çalıştırma
+```bash
+git clone https://github.com/mehmetozdmirrr/PawLinker.git
+cd PawLinker
+flutter pub get
+flutter run
