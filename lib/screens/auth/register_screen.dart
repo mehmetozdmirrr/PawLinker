@@ -10,6 +10,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  // Controllers
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController nameController = TextEditingController();
@@ -17,57 +18,122 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController petAgeController = TextEditingController();
   final TextEditingController petImageController = TextEditingController();
 
+  // Form alanları
   String petType = 'Kedi';
   String petGender = 'Dişi';
   bool vaccinated = false;
   bool neutered = false;
 
+  bool _loading = false;
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  void register() async {
-    try {
-      UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text,
-      );
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    nameController.dispose();
+    petNameController.dispose();
+    petAgeController.dispose();
+    petImageController.dispose();
+    super.dispose();
+  }
 
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'uid': userCredential.user!.uid,
-        'name': nameController.text.trim(),
-        'email': emailController.text.trim(),
+  Future<void> register() async {
+    // Basit doğrulamalar
+    final email = emailController.text.trim();
+    final pass = passwordController.text;
+    final displayName = nameController.text.trim();
+    final petName = petNameController.text.trim();
+    final petAgeStr = petAgeController.text.trim();
+    final age = int.tryParse(petAgeStr);
+
+    if (email.isEmpty ||
+        pass.isEmpty ||
+        displayName.isEmpty ||
+        petName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen tüm zorunlu alanları doldurun')),
+      );
+      return;
+    }
+    if (age == null || age < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yaş geçersiz')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      // 1) Kullanıcı oluştur
+      final cred = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+      final uid = cred.user!.uid;
+
+      // 2) Users dokümanı
+      await _firestore.collection('users').doc(uid).set({
+        'uid': uid,
+        'name': displayName,
+        'email': email,
         'pet': {
-          'name': petNameController.text.trim(),
-          'type': petType,
-          'age': int.parse(petAgeController.text.trim()),
+          'name': petName,
+          'type': petType.toLowerCase(),
+          'age': age,
           'gender': petGender,
           'vaccinated': vaccinated,
           'neutered': neutered,
         },
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
-      await _firestore.collection('pets').add({
-        'name': petNameController.text.trim(),
+      // 3) Pets koleksiyonu
+      final petDoc = await _firestore.collection('pets').add({
+        'name': petName,
         'type': petType.toLowerCase(),
         'image': petImageController.text.trim().isNotEmpty
             ? petImageController.text.trim()
             : 'https://placedog.net/400/300?id=2',
-        'ownerId': userCredential.user!.uid,
-        'age': int.parse(petAgeController.text.trim()),
+        'ownerId': uid,
+        'age': age,
         'gender': petGender,
         'vaccinated': vaccinated,
         'neutered': neutered,
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // 4) Kullanıcıya primaryPetId iliştir (ileride işimize yarar)
+      await _firestore.collection('users').doc(uid).update({
+        'primaryPetId': petDoc.id,
+      });
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kayıt başarılı!')),
       );
+      // Başarılı durumda Navigator kullanmıyoruz; AuthGate MatchScreen'e geçirecek.
+    } on FirebaseAuthException catch (e) {
+      final msg = switch (e.code) {
+        'email-already-in-use' => 'Bu e-posta zaten kullanılıyor',
+        'weak-password' => 'Şifre zayıf (en az 6 karakter önerilir)',
+        'invalid-email' => 'E-posta biçimi hatalı',
+        _ => 'Kayıt başarısız: ${e.code}',
+      };
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
+      }
     } catch (e) {
-      debugPrint("❌ Firestore Hatası (pets ekleme): $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bir hata oluştu')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -101,39 +167,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    // Kullanıcı bilgileri
                     TextField(
                       controller: nameController,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(labelText: "Adınız"),
                     ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(labelText: "E-posta"),
                     ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: passwordController,
-                      decoration: const InputDecoration(labelText: "Şifre"),
                       obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      decoration: const InputDecoration(labelText: "Şifre"),
                     ),
+
                     const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+
                     const Text(
                       "Evcil Hayvan Bilgileri",
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
+                    const SizedBox(height: 8),
+
                     TextField(
                       controller: petNameController,
+                      textInputAction: TextInputAction.next,
                       decoration:
                           const InputDecoration(labelText: "Hayvan Adı"),
                     ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: petAgeController,
-                      decoration: const InputDecoration(labelText: "Yaş"),
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(labelText: "Yaş"),
                     ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: petImageController,
-                      decoration: const InputDecoration(labelText: "Resim URL"),
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                          labelText: "Resim URL (opsiyonel)"),
                     ),
+
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -143,12 +229,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           value: petType,
                           onChanged: (value) =>
                               setState(() => petType = value!),
-                          items: ['Kedi', 'Köpek']
-                              .map((e) => DropdownMenuItem(
-                                    value: e,
-                                    child: Text(e),
-                                  ))
-                              .toList(),
+                          items: ['Kedi', 'Köpek'].map((e) {
+                            return DropdownMenuItem(value: e, child: Text(e));
+                          }).toList(),
                         ),
                         const SizedBox(width: 20),
                         const Text("Cinsiyet: "),
@@ -157,36 +240,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           value: petGender,
                           onChanged: (value) =>
                               setState(() => petGender = value!),
-                          items: ['Dişi', 'Erkek']
-                              .map((e) => DropdownMenuItem(
-                                    value: e,
-                                    child: Text(e),
-                                  ))
-                              .toList(),
+                          items: ['Dişi', 'Erkek'].map((e) {
+                            return DropdownMenuItem(value: e, child: Text(e));
+                          }).toList(),
                         ),
                       ],
                     ),
                     CheckboxListTile(
                       title: const Text("Aşılı"),
+                      contentPadding: EdgeInsets.zero,
                       value: vaccinated,
                       onChanged: (value) => setState(() => vaccinated = value!),
                     ),
                     CheckboxListTile(
                       title: const Text("Kısırlaştırılmış"),
+                      contentPadding: EdgeInsets.zero,
                       value: neutered,
                       onChanged: (value) => setState(() => neutered = value!),
                     ),
+
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        minimumSize: const Size(double.infinity, 48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+
+                    // Kayıt butonu
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : register,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text("Kayıt Ol"),
                       ),
-                      child: const Text("Kayıt Ol"),
                     ),
                   ],
                 ),

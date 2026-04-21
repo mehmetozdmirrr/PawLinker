@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ⬅️ eklendi
+
 import 'screens/auth/login_screen.dart';
+import 'screens/match_screen.dart'; // ⬅️ eklendi (dosyan senin projede kök dizinde)
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +31,32 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.teal,
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: const AuthGate(), // ⬅️ LoginScreen yerine AuthGate
       debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasData) {
+          // kullanıcı girişliyse
+          return const MatchScreen();
+        }
+        // kullanıcı girişli değilse
+        return const LoginScreen();
+      },
     );
   }
 }

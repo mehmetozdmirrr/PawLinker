@@ -1,12 +1,10 @@
 // 📦 Gerekli paketler:
 // flutter
 // firebase_auth
-// cloud_firestore
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../match_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -19,22 +17,56 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _loading = false;
 
-  void login() async {
-    try {
-      await _auth.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MatchScreen()),
-      );
-    } catch (e) {
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> login() async {
+    // basit boşluk kontrolü
+    final email = emailController.text.trim();
+    final pass = passwordController.text.trim();
+    if (email.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
+        const SnackBar(content: Text('E-posta ve şifre boş olamaz')),
       );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+      if (!mounted) return;
+      // Başarılı: AuthGate otomatik olarak MatchScreen'e geçirecek.
+      // Burada Navigator kullanmıyoruz.
+    } on FirebaseAuthException catch (e) {
+      final msg = switch (e.code) {
+        'invalid-email' => 'E-posta biçimi hatalı',
+        'user-not-found' => 'Bu e-posta ile hesap bulunamadı',
+        'wrong-password' => 'Şifre hatalı',
+        'user-disabled' => 'Bu hesap devre dışı bırakılmış',
+        'too-many-requests' => 'Çok fazla deneme. Lütfen sonra tekrar deneyin',
+        _ => 'Giriş yapılamadı: ${e.code}',
+      };
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bir şeyler ters gitti')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -53,49 +85,74 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text(
                 "PawLinker",
                 style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange),
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
               ),
               const SizedBox(height: 32),
+
+              // E-Posta
               TextField(
                 controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: "E-posta",
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Şifre
               TextField(
                 controller: passwordController,
                 obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _loading ? null : login(),
                 decoration: const InputDecoration(
                   labelText: "Şifre",
                   border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 24),
+
+              // Giriş butonu
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: login,
+                  onPressed: _loading ? null : login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: const Text("Giriş Yap"),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text("Giriş Yap"),
                 ),
               ),
+
               const SizedBox(height: 12),
+
+              // Kayıt sayfasına geçiş
               TextButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                  );
-                },
+                onPressed: _loading
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const RegisterScreen(),
+                          ),
+                        );
+                      },
                 child: const Text("Hesabınız yok mu? Kayıt olun"),
               ),
             ],
